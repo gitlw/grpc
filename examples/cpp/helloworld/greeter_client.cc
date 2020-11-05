@@ -19,6 +19,8 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <sstream>
+#include <fstream>
 
 #include <grpcpp/grpcpp.h>
 
@@ -34,6 +36,135 @@ using grpc::Status;
 using helloworld::HelloRequest;
 using helloworld::HelloReply;
 using helloworld::Greeter;
+
+
+enum class ProtoheadErrorCode {
+    kOK = 0,                  ///< Things looks ok
+    kProtoheadFailure = 1,    ///< Some things are not ok
+    kProtoheadTlsFailure = 2  ///< Some TLS things are not ok
+};
+
+std::error_code make_error_code(ProtoheadErrorCode e);
+
+/**
+ * \brief Provides human readable representation of error codes related to protohead
+ */
+class ProtoheadErrorCategory : public std::error_category {
+public:
+    const char *name() const noexcept override;
+
+    std::string message(int ev) const override;
+};
+
+std::ostream &operator<<(std::ostream &o, ProtoheadErrorCode code);
+
+// -------- impls
+const std::error_category& error_category() {
+    static ProtoheadErrorCategory instance;
+    return instance;
+}
+
+std::error_code make_error_code(ProtoheadErrorCode e) {
+    return std::error_code(static_cast<int>(e), error_category());
+}
+
+const char* ProtoheadErrorCategory::name() const noexcept { return "northguard::protohead::ProtoheadErrorCategory"; }
+
+std::string ProtoheadErrorCategory::message(int ev) const {
+    std::stringstream strstream;
+
+    switch (static_cast<ProtoheadErrorCode>(ev)) {
+        case ProtoheadErrorCode::kOK:
+            strstream << "Protohead status << kOK(" << static_cast<uint16_t>(ProtoheadErrorCode::kOK) << ')';
+            return strstream.str();
+
+        case ProtoheadErrorCode::kProtoheadFailure:
+            strstream << "Protohead encountered error in Protohead: kProtoheadFailure("
+                      << static_cast<uint16_t>(ProtoheadErrorCode::kProtoheadFailure) << ')';
+            return strstream.str();
+
+        case ProtoheadErrorCode::kProtoheadTlsFailure:
+            strstream << "Protohead encountered error in TLS initialization: kProtoheadTlsFailure("
+                      << static_cast<uint16_t>(ProtoheadErrorCode::kProtoheadTlsFailure) << ')';
+            return strstream.str();
+
+        default:
+            strstream << "Unknown ProtoheadErrorCategory: " << ev;
+            return strstream.str();
+    }
+}
+
+std::ostream& operator<<(std::ostream& o, ProtoheadErrorCode code) {
+    o << static_cast<uint8_t>(code);
+    return o;
+}
+//------ end of impls
+
+std::string ReadFile(const std::string &filename, std::error_code &ec) {
+    ec.clear();
+    std::ifstream in(filename);
+    if (!in) {
+        ec = make_error_code(ProtoheadErrorCode::kProtoheadTlsFailure);
+        return {};
+    }
+    std::istreambuf_iterator<char> begin(in), end;
+    ec = make_error_code(ProtoheadErrorCode::kOK);
+    return std::string(begin, end);
+}
+
+grpc::SslCredentialsOptions ReadTlsCredentials(const std::string &tls_private_key_filename,
+                                               const std::string &tls_cert_chain_filename,
+                                               const std::string &tls_root_certs_filename, std::error_code &ec) {
+    ec.clear();
+    grpc::SslCredentialsOptions tls_options;
+
+    std::cout << "Reading private key file: " << tls_private_key_filename;
+    tls_options.pem_private_key = ReadFile(tls_private_key_filename, ec);
+    if (ec) {
+        std::cerr << "Unable to read private key file: " << tls_private_key_filename;
+        return {};
+    }
+    std::cout << "Reading certificate chain file: " << tls_cert_chain_filename;
+    tls_options.pem_cert_chain = ReadFile(tls_cert_chain_filename, ec);
+    if (ec) {
+        std::cerr << "Unable to read certificate chain file: " << tls_cert_chain_filename;
+        return {};
+    }
+    std::cout << "Reading root ca certs file: " << tls_root_certs_filename;
+    tls_options.pem_root_certs = ReadFile(tls_root_certs_filename, ec);
+    if (ec) {
+        std::cerr << "Unable to read root certificates file: " << tls_root_certs_filename;
+        return {};
+    }
+
+    return tls_options;
+}
+
+std::shared_ptr<grpc::ChannelCredentials> MakeSslChannelCredentials(const std::string &tls_private_key_filename,
+                                                                  const std::string &tls_cert_chain_filename,
+                                                                  const std::string &tls_root_certs_filename,
+                                                                  std::error_code &ec) {
+    grpc::SslCredentialsOptions tls_creds =
+            ReadTlsCredentials(tls_private_key_filename, tls_cert_chain_filename, tls_root_certs_filename, ec);
+    if (ec) return {};
+
+    grpc::SslCredentialsOptions tls_client_opts;
+    tls_client_opts.pem_root_certs = tls_creds.pem_root_certs;
+    tls_client_opts.pem_cert_chain = tls_creds.pem_cert_chain;
+    tls_client_opts.pem_private_key = tls_creds.pem_private_key;
+
+    auto channel_creds = grpc::SslCredentials(tls_client_opts);
+    if (!channel_creds) {
+        ec = make_error_code(ProtoheadErrorCode::kProtoheadTlsFailure);
+        std::cerr << "Unable to create tls channel credentials."
+                  << " Private key file: " << tls_private_key_filename
+                  << " Certificate chain file: " << tls_cert_chain_filename
+                  << " Root certs file: " << tls_root_certs_filename;
+        return {};
+    }
+
+    return channel_creds;
+}
 
 class GreeterClient {
  public:
@@ -95,10 +226,19 @@ int main(int argc, char** argv) {
       return 0;
     }
   } else {
-    target_str = "localhost:50051";
+    target_str = "ld0:50051";
   }
-  GreeterClient greeter(grpc::CreateChannel(
-      target_str, grpc::InsecureChannelCredentials()));
+
+// Create a default SSL ChannelCredentials object.
+    std::string privateKeyFileName = "/home/lucas/workspace/Northguard/tls/client/client.key.p8";
+    std::string certChainFileName = "/home/lucas/workspace/Northguard/tls/client/client.cert.pem";
+    std::string rootCertsFileName = "/home/lucas/workspace/Northguard/tls/intermediate/certs/ca-chain-bundle.cert.pem";
+
+    std::error_code ec;
+    auto channel_creds = MakeSslChannelCredentials(
+            privateKeyFileName, certChainFileName, rootCertsFileName, ec);
+
+  GreeterClient greeter(grpc::CreateChannel(target_str, channel_creds));
   std::string user("world");
   std::string reply = greeter.SayHello(user);
   std::cout << "Greeter received: " << reply << std::endl;

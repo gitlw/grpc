@@ -18,6 +18,7 @@
 # that automatically builds all the dependencies before building helloworld.
 
 cmake_minimum_required(VERSION 3.5.1)
+option(USE_CCACHE "Use ccache to accelerate repeated compilation (including dependencies)" ON)
 
 project(HelloWorld C CXX)
 
@@ -28,6 +29,20 @@ else()
 endif()
 
 find_package(Threads REQUIRED)
+
+if (USE_CCACHE)
+  find_program(CCACHE_EXE
+          NAMES ccache
+          DOC "Path to ccache executable"
+          )
+  if (CCACHE_EXE)
+    message(STATUS "Using ccache ${CCACHE_EXE}. Disable with -DUSE_CCACHE=OFF")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_EXE}")
+  else()
+    message(STATUS "ccache not found.")
+    message(STATUS "Installing ccache will make rebuilding dependencies significantly faster.")
+  endif()
+endif()
 
 if(GRPC_AS_SUBMODULE)
   # One way to build a projects that uses gRPC is to just include the
@@ -79,7 +94,7 @@ elseif(GRPC_FETCHCONTENT)
     # v1.25.0, v1.26.0 etc..
     # For the purpose of testing, we override the tag used to the commit
     # that's currently under test.
-    GIT_TAG        vGRPC_TAG_VERSION_OF_YOUR_CHOICE)
+    GIT_TAG        v1.33.2)
   FetchContent_MakeAvailable(grpc)
 
   # Since FetchContent uses add_subdirectory under the hood, we can use
