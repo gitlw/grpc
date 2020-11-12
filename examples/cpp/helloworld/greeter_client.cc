@@ -118,19 +118,19 @@ grpc::SslCredentialsOptions ReadTlsCredentials(const std::string &tls_private_ke
     ec.clear();
     grpc::SslCredentialsOptions tls_options;
 
-    std::cout << "Reading private key file: " << tls_private_key_filename;
+    std::cout << "\nReading private key file: " << tls_private_key_filename;
     tls_options.pem_private_key = ReadFile(tls_private_key_filename, ec);
     if (ec) {
         std::cerr << "Unable to read private key file: " << tls_private_key_filename;
         return {};
     }
-    std::cout << "Reading certificate chain file: " << tls_cert_chain_filename;
+    std::cout << "\nReading certificate chain file: " << tls_cert_chain_filename;
     tls_options.pem_cert_chain = ReadFile(tls_cert_chain_filename, ec);
     if (ec) {
         std::cerr << "Unable to read certificate chain file: " << tls_cert_chain_filename;
         return {};
     }
-    std::cout << "Reading root ca certs file: " << tls_root_certs_filename;
+    std::cout << "\nReading root ca certs file: " << tls_root_certs_filename;
     tls_options.pem_root_certs = ReadFile(tls_root_certs_filename, ec);
     if (ec) {
         std::cerr << "Unable to read root certificates file: " << tls_root_certs_filename;
@@ -226,13 +226,16 @@ int main(int argc, char** argv) {
       return 0;
     }
   } else {
-    target_str = "ld0:50051";
+    target_str = "luwang-ld2.linkedin.biz:50051";
   }
 
 // Create a default SSL ChannelCredentials object.
-    std::string privateKeyFileName = "/home/lucas/workspace/Northguard/tls/client/client.key.p8";
-    std::string certChainFileName = "/home/lucas/workspace/Northguard/tls/client/client.cert.pem";
-    std::string rootCertsFileName = "/home/lucas/workspace/Northguard/tls/intermediate/certs/ca-chain-bundle.cert.pem";
+    // std::string privateKeyFileName = "/home/luwang/workspace/Northguard/test-client/identity.key";
+    // std::string certChainFileName = "/home/luwang/workspace/Northguard/test-client/identity.cert";
+    // std::string rootCertsFileName = "/etc/ssl/certs/ca-bundle.crt";
+  std::string privateKeyFileName = "/home/luwang/workspace/Northguard/tls/client/client.key.p8";
+  std::string certChainFileName = "/home/luwang/workspace/Northguard/tls/client/ld2_client.cert.pem";
+  std::string rootCertsFileName = "/home/luwang/workspace/Northguard/tls/intermediate/certs/ca-chain-bundle.cert.pem";
 
     std::error_code ec;
     auto channel_creds = MakeSslChannelCredentials(

@@ -193,9 +193,12 @@ void RunServer() {
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;
   // Listen on the given address without any authentication mechanism.
-  std::string privateKeyFileName = "/home/lucas/workspace/Northguard/tls/server/server.key.p8";
-  std::string certChainFileName = "/home/lucas/workspace/Northguard/tls/server/server.cert.pem";
-  std::string rootCertsFileName = "/home/lucas/workspace/Northguard/tls/intermediate/certs/ca-chain-bundle.cert.pem";
+  // std::string privateKeyFileName = "/home/luwang/workspace/Northguard/test-broker/identity.key";
+  // std::string certChainFileName = "/home/luwang/workspace/Northguard/test-broker/identity.cert";
+  // std::string rootCertsFileName = "/etc/ssl/certs/ca-bundle.crt";
+  std::string privateKeyFileName = "/home/luwang/workspace/Northguard/tls/server/server.key.p8";
+  std::string certChainFileName = "/home/luwang/workspace/Northguard/tls/server/ld2_server.cert.pem";
+  std::string rootCertsFileName = "/home/luwang/workspace/Northguard/tls/intermediate/certs/ca-chain-bundle.cert.pem";
 
   std::error_code ec;
   std::shared_ptr<grpc::ServerCredentials> credentials = MakeSslServerCredentials(
